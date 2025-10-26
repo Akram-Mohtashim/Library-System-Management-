@@ -532,6 +532,9 @@ Description: Write a CTAS query to create a new table that lists each member and
     Number of overdue books
     Total fines
 
+```sql
+
+
 CREATE TABLE book_overdue
 AS
 
@@ -555,6 +558,8 @@ WHERE rs.return_id IS NULL
 
 SELECT *
 FROM book_overdue
+
+```
 
 ## Reports
 
