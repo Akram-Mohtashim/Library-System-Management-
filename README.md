@@ -186,12 +186,20 @@ HAVING COUNT(*) > 1
 - **Task 6: Create Summary Tables**: Used CTAS to generate new tables based on query results - each book and total book_issued_cnt**
 
 ```sql
-CREATE TABLE book_issued_cnt AS
-SELECT b.isbn, b.book_title, COUNT(ist.issued_id) AS issue_count
-FROM issued_status as ist
-JOIN books as b
-ON ist.issued_book_isbn = b.isbn
-GROUP BY b.isbn, b.book_title;
+CREATE TABLE book_counts
+AS
+Select 
+	b.isbn,
+	b.book_title,
+	COUNT(ist.issued_id) as no_issued
+FROM books as b
+JOIN
+issued_status as ist
+ON ist.Issued_book_isbn = b.isbn
+GROUP BY 1, 2;
+
+
+Select * FROM book_counts;
 ```
 
 
@@ -209,15 +217,10 @@ WHERE category = 'Classic';
 8. **Task 8: Find Total Rental Income by Category**:
 
 ```sql
-SELECT 
-    b.category,
-    SUM(b.rental_price),
-    COUNT(*)
-FROM 
-issued_status as ist
-JOIN
-books as b
-ON b.isbn = ist.issued_book_isbn
+Select
+		category,
+		SUM(rental_price) as Total_rentalIncome
+From books
 GROUP BY 1
 ```
 
@@ -299,60 +302,87 @@ Write a query to update the status of books in the books table to "Yes" when the
 
 ```sql
 
-CREATE OR REPLACE PROCEDURE add_return_records(p_return_id VARCHAR(10), p_issued_id VARCHAR(10), p_book_quality VARCHAR(10))
+---Manaually
+
+SELECT *
+FROM books
+WHERE ISBN = '978-0-451-52994-2'
+
+
+UPDATE books
+SET status = 'no'
+WHERE isbn = '978-0-451-52994-2'
+
+
+SELECT *
+FROM return_status
+WHERE issued_id = 'IS130'
+
+INSERT INTO return_status (return_id, issued_id, return_date)
+VALUES
+	('RS126', 'IS130', CURRENT_DATE)
+
+
+UPDATE books
+SET status = 'yes'
+WHERE isbn = '978-0-451-52994-2'
+
+SELECT *
+FROM books
+WHERE ISBN = '978-0-451-52994-2'
+
+
+---STORE PROCEDURE
+
+CREATE OR REPLACE PROCEDURE add_return_record(p_return_id  VARCHAR(20), p_issued_id VARCHAR(40))
 LANGUAGE plpgsql
 AS $$
 
-DECLARE
-    v_isbn VARCHAR(50);
-    v_book_name VARCHAR(80);
-    
-BEGIN
-    -- all your logic and code
-    -- inserting into returns based on users input
-    INSERT INTO return_status(return_id, issued_id, return_date, book_quality)
-    VALUES
-    (p_return_id, p_issued_id, CURRENT_DATE, p_book_quality);
+DECLARE 
+	v_isbn VARCHAR(20);
+	v_book_name VARCHAR(75);
+BEGIN 
+	-- all logic and code
+	-- Inserting into return based on user input
+		INSERT INTO return_status (return_id, issued_id, return_date )
+		VALUES
+		(p_return_id, p_issued_id,CURRENT_DATE);
 
-    SELECT 
-        issued_book_isbn,
-        issued_book_name
-        INTO
-        v_isbn,
-        v_book_name
-    FROM issued_status
-    WHERE issued_id = p_issued_id;
+		SELECT 
+			issued_book_isbn,
+			issued_book_name
+			INTO
+			v_isbn,
+			v_book_name
+		FROM issued_status
+		WHERE issued_id = p_issued_id;
+		
+		UPDATE books
+		SET status = 'yes'
+		WHERE isbn = v_isbn;
 
-    UPDATE books
-    SET status = 'yes'
-    WHERE isbn = v_isbn;
-
-    RAISE NOTICE 'Thank you for returning the book: %', v_book_name;
-    
+		RAISE NOTICE 'Thank you for returing the book: %', v_book_name;
 END;
 $$
 
 
--- Testing FUNCTION add_return_records
+---Calling Function
+CALL add_return_record ('RS135', 'IS135');
 
-issued_id = IS135
-ISBN = WHERE isbn = '978-0-307-58837-1'
+---Testing Function
 
-SELECT * FROM books
-WHERE isbn = '978-0-307-58837-1';
+SELECT *
+FROM issued_status
+WHERE issued_id ='IS135'
 
-SELECT * FROM issued_status
-WHERE issued_book_isbn = '978-0-307-58837-1';
 
-SELECT * FROM return_status
-WHERE issued_id = 'IS135';
+SELECT *
+FROM return_status
+WHERE issued_id ='IS135'
 
--- calling function 
-CALL add_return_records('RS138', 'IS135', 'Good');
-
--- calling function 
-CALL add_return_records('RS148', 'IS140', 'Good');
-
+SELECT *
+FROM books
+WHERE ISBN = '978-0-307-58837-1'
 ```
 
 
@@ -425,13 +455,10 @@ JOIN
 branch as b
 ON e.branch_id = b.branch_id
 GROUP BY 1, 2
-```
-
-**Task 18: Identify Members Issuing High-Risk Books**  
-Write a query to identify members who have issued books more than twice with the status "damaged" in the books table. Display the member name, book title, and the number of times they've issued damaged books.    
+```   
 
 
-**Task 19: Stored Procedure**
+**Task 18: Stored Procedure**
 Objective:
 Create a stored procedure to manage the status of books in a library system.
 Description:
@@ -443,60 +470,57 @@ If the book is not available (status = 'no'), the procedure should return an err
 
 ```sql
 
-CREATE OR REPLACE PROCEDURE issue_book(p_issued_id VARCHAR(10), p_issued_member_id VARCHAR(30), p_issued_book_isbn VARCHAR(30), p_issued_emp_id VARCHAR(10))
+CREATE OR REPLACE PROCEDURE issue_book (p_issued_id VARCHAR(20), p_issued_member_id VARCHAR(40), p_issued_book_isbn VARCHAR(40), p_issued_emp_id VARCHAR(40))
 LANGUAGE plpgsql
 AS $$
 
 DECLARE
--- all the variabable
-    v_status VARCHAR(10);
-
+-- all the variable
+		v_status VARCHAR(15);
 BEGIN
--- all the code
-    -- checking if book is available 'yes'
-    SELECT 
-        status 
-        INTO
-        v_status
-    FROM books
-    WHERE isbn = p_issued_book_isbn;
+-- all the logic
+	--- checking if book is available 'yes'
+	SELECT 
+		Status
+		INTO
+		v_status
+	FROM books
+	WHERE isbn = p_issued_book_isbn;
 
-    IF v_status = 'yes' THEN
+	IF v_status = 'yes' THEN
+		
+		INSERT INTO issued_status(issued_id, issued_member_id,issued_date, issued_book_isbn, issued_emp_id)
+				VALUES
+					(p_issued_id, p_issued_member_id, CURRENT_DATE, p_issued_book_isbn, p_issued_emp_id);
 
-        INSERT INTO issued_status(issued_id, issued_member_id, issued_date, issued_book_isbn, issued_emp_id)
-        VALUES
-        (p_issued_id, p_issued_member_id, CURRENT_DATE, p_issued_book_isbn, p_issued_emp_id);
+					UPDATE books
+					SET status = 'no'
+					WHERE isbn = p_issued_book_isbn;
 
-        UPDATE books
-            SET status = 'no'
-        WHERE isbn = p_issued_book_isbn;
-
-        RAISE NOTICE 'Book records added successfully for book isbn : %', p_issued_book_isbn;
-
-
-    ELSE
-        RAISE NOTICE 'Sorry to inform you the book you have requested is unavailable book_isbn: %', p_issued_book_isbn;
-    END IF;
+				RAISE NOTICE 'Book record added successfully for book ISBN : %', p_issued_book_isbn;
+	ELSE
+		
+		RAISE NOTICE 'Sorry to inform you the book you have requested is unavailable book_isbn: %', p_issued_book_isbn;
+	END IF;
+	
 END;
 $$
 
--- Testing The function
-SELECT * FROM books;
--- "978-0-553-29698-2" -- yes
--- "978-0-375-41398-8" -- no
-SELECT * FROM issued_status;
 
-CALL issue_book('IS155', 'C108', '978-0-553-29698-2', 'E104');
-CALL issue_book('IS156', 'C108', '978-0-375-41398-8', 'E104');
+CALL issue_book('IS162', 'C105', '978-0-393-91257-8', 'E110' )
+
+
+978-0-393-91257-8 -- yes
+978-0-7432-7357-1  -- no
+
 
 SELECT * FROM books
-WHERE isbn = '978-0-375-41398-8'
-
+WHERE isbn = '978-0-393-91257-8'
 ```
 
 
 
-**Task 20: Create Table As Select (CTAS)**
+**Task 19: Create Table As Select (CTAS)**
 Objective: Create a CTAS (Create Table As Select) query to identify overdue books and calculate fines.
 
 Description: Write a CTAS query to create a new table that lists each member and the books they have issued but not returned within 30 days. The table should include:
@@ -508,7 +532,29 @@ Description: Write a CTAS query to create a new table that lists each member and
     Number of overdue books
     Total fines
 
+CREATE TABLE book_overdue
+AS
 
+SELECT
+		bk.isbn,
+		bk.book_title, 
+		ist.issued_date,
+		CASE WHEN AGE (CURRENT_DATE , issued_date) > INTERVAL '30 days'
+			 THEN (EXTRACT(DAY FROM AGE(CURRENT_DATE, issued_date) - INTERVAL '30 days'/8600) * 10)
+			 ELSE 0
+			 END as Fine
+FROM books as bk
+JOIN
+issued_status as ist
+ON ist.issued_book_isbn = bk.isbn
+LEFT JOIN
+return_status rs
+ON rs.issued_id = ist.issued_id
+WHERE rs.return_id IS NULL
+
+
+SELECT *
+FROM book_overdue
 
 ## Reports
 
@@ -520,24 +566,4 @@ Description: Write a CTAS query to create a new table that lists each member and
 
 This project demonstrates the application of SQL skills in creating and managing a library management system. It includes database setup, data manipulation, and advanced querying, providing a solid foundation for data management and analysis.
 
-## How to Use
-
-1. **Clone the Repository**: Clone this repository to your local machine.
-   ```sh
-   git clone https://github.com/najirh/Library-System-Management---P2.git
-   ```
-
-2. **Set Up the Database**: Execute the SQL scripts in the `database_setup.sql` file to create and populate the database.
-3. **Run the Queries**: Use the SQL queries in the `analysis_queries.sql` file to perform the analysis.
-4. **Explore and Modify**: Customize the queries as needed to explore different aspects of the data or answer additional questions.
-
-## Author - Zero Analyst
-
-This project showcases SQL skills essential for database management and analysis. For more content on SQL and data analysis, connect with me through the following channels:
-
-- **YouTube**: [Subscribe to my channel for tutorials and insights](https://www.youtube.com/@zero_analyst)
-- **Instagram**: [Follow me for daily tips and updates](https://www.instagram.com/zero_analyst/)
-- **LinkedIn**: [Connect with me professionally](https://www.linkedin.com/in/najirr)
-- **Discord**: [Join our community for learning and collaboration](https://discord.gg/36h5f2Z5PK)
-
-Thank you for your interest in this project!
+Thank you.
